@@ -48,30 +48,6 @@ export function DropZone({ onFilesSelected, disabled }: DropZoneProps) {
     [handleFiles]
   );
 
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      if (disabled) return;
-
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      const files: File[] = [];
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) files.push(file);
-        }
-      }
-
-      if (files.length > 0) {
-        e.preventDefault();
-        handleFiles(files);
-      }
-    },
-    [handleFiles, disabled]
-  );
 
   return (
     <div
@@ -79,7 +55,6 @@ export function DropZone({ onFilesSelected, disabled }: DropZoneProps) {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onPaste={handlePaste}
       onClick={() => !disabled && inputRef.current?.click()}
       role="button"
       tabIndex={disabled ? -1 : 0}
@@ -104,7 +79,7 @@ export function DropZone({ onFilesSelected, disabled }: DropZoneProps) {
           </svg>
         </div>
         <p className="dropzone__title">이미지를 드래그하거나 클릭하여 업로드</p>
-        <p className="dropzone__subtitle">PNG, JPG, WebP, GIF 지원 · 여러 파일 동시 업로드 가능 · Ctrl+V로 붙여넣기</p>
+        <p className="dropzone__subtitle">PNG, JPG, WebP, GIF 지원 · 여러 파일 동시 업로드 가능</p>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DropZone } from './components/DropZone';
+import { ClipboardInput } from './components/ClipboardInput';
 import { ImageCard } from './components/ImageCard';
 import type { AnalysisResult, UploadStatus } from './types';
 import './App.css';
@@ -8,12 +9,10 @@ export default function App() {
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
 
   const handleFilesSelected = async (files: File[]) => {
     setStatus('uploading');
     setError(null);
-    setProgress(0);
 
     // 먼저 이미지 미리보기 생성 (분석 결과 없이)
     const fileReaders = files.map((file) => {
@@ -69,7 +68,6 @@ export default function App() {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
       setStatus('error');
     } finally {
-      setProgress(100);
     }
   };
 
@@ -77,7 +75,6 @@ export default function App() {
     setResults([]);
     setStatus('idle');
     setError(null);
-    setProgress(0);
   };
 
   return (
@@ -118,6 +115,11 @@ export default function App() {
         <section className="upload-section">
           <DropZone
             onFilesSelected={handleFilesSelected}
+            disabled={status === 'uploading'}
+          />
+
+          <ClipboardInput
+            onImagesSelected={handleFilesSelected}
             disabled={status === 'uploading'}
           />
 
