@@ -111,7 +111,7 @@ const upload = multer({
 
 // CORS 설정 - 보안 강화
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.CLIENT_URL || 'http://localhost:10031',
   credentials: true,
   maxAge: 86400, // 24시간
   methods: ['POST', 'OPTIONS'],
@@ -321,7 +321,7 @@ const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
 // 그 외 모든 경로는 프론트엔드의 index.html을 반환하도록 설정 (SPA 라우팅 지원)
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
