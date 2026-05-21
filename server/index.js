@@ -191,7 +191,7 @@ app.post('/api/analyze', upload.array('images', 5), async (req, res) => {
     const results = await Promise.all(
       files.map(async (file) => {
         try {
-          const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+          const originalname = file.originalname;
 
           // 1) Sharp를 이용한 이미지 전처리 (원본 색상 보존: normalize 제거, 손실 압축 제거 후 png 사용)
           const processedBuffer = await sharp(file.buffer)
@@ -278,7 +278,7 @@ app.post('/api/analyze', upload.array('images', 5), async (req, res) => {
             analysis,
           };
         } catch (error) {
-          const errorName = file ? Buffer.from(file.originalname, 'latin1').toString('utf8').slice(0, 50) : 'unknown';
+          const errorName = file ? file.originalname.slice(0, 50) : 'unknown';
           console.error(`❌ 이미지 처리 실패: ${errorName}`);
           console.error('에러 상세:', error);
           if (error instanceof Error) {
@@ -321,8 +321,12 @@ const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
 // 그 외 모든 경로는 프론트엔드의 index.html을 반환하도록 설정 (SPA 라우팅 지원)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    res.sendFile(path.join(distPath, 'index.html'));
+  } else {
+    next();
+  }
 });
 
 // 비동기 예외 및 종료 원인 추적
