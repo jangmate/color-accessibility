@@ -8,6 +8,9 @@ import './App.css';
 
 export default function App() {
   const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [history, setHistory] = useState<AnalysisResult[]>([]);
+  const [historySearch, setHistorySearch] = useState('');
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [modalState, setModalState] = useState<{ isOpen: boolean; index: number }>({
@@ -16,6 +19,24 @@ export default function App() {
   });
   const [queue, setQueue] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // 히스토리 항목 불러오기
+  const fetchHistory = async (search = '') => {
+    try {
+      const url = search ? `/api/history?search=${encodeURIComponent(search)}` : '/api/history';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.history || []);
+      }
+    } catch (e) {
+      console.error('히스토리 불러오기 실패:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   // 대기열 처리 로직
   useEffect(() => {
@@ -87,6 +108,9 @@ export default function App() {
         });
       });
 
+      // 새로운 결과가 추가되었으므로 히스토리도 다시 불러옵니다
+      fetchHistory(historySearch);
+
       // 큐(대기열)와 관계없이 현재 배치 처리가 끝났으므로 done 처리
       // 진행할 항목이 더 있다면 useEffect에서 다시 queue 길이 확인 후 uploading 상태로 만듦
       setStatus('done');
@@ -148,6 +172,17 @@ export default function App() {
       index: prev.index < results.length - 1 ? prev.index + 1 : 0,
     }));
   };
+
+  const handleHistorySearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setHistorySearch(e.target.value);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchHistory(historySearch);
+  };
+
+  const visibleHistory = showAllHistory ? history : history.slice(0, 6);
 
   return (
     <div className="app">
@@ -234,6 +269,54 @@ export default function App() {
           </section>
         )}
 
+        {/* 히스토리 섹션 */}
+        <section className="results-section history-section">
+          <div className="results-header">
+            <h2>최근 검수 기록 ({history.length}개)</h2>
+            <form onSubmit={handleSearchSubmit} className="history-search-form">
+              <input
+                type="text"
+                placeholder="결과 검색..."
+                value={historySearch}
+                onChange={handleHistorySearch}
+                className="history-search-input"
+              />
+              <button type="submit" className="btn btn--secondary">검색</button>
+            </form>
+          </div>
+          
+          {history.length > 0 ? (
+            <>
+              <div className="results-list">
+                {visibleHistory.map((item, i) => (
+                  <ImageCard
+                    key={`history-${item.id || i}`}
+                    result={{...item, status: 'done'}}
+                    onImageClick={() => {
+                      // 모달 처리를 위해 임시로 results에 넣거나 모달용 분리 가능
+                      // 간단하게 results를 통해 모달을 띄우는 구조라면 해당 기록을 results 맨 앞에 추가
+                      setResults(prev => [item, ...prev.filter(r => r.filename !== item.filename)]);
+                      setModalState({ isOpen: true, index: 0 });
+                    }}
+                  />
+                ))}
+              </div>
+              {history.length > 6 && (
+                <div className="history-expand">
+                  <button 
+                    className="btn btn--secondary" 
+                    onClick={() => setShowAllHistory(!showAllHistory)}
+                  >
+                    {showAllHistory ? '접기' : '더보기'}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="history-empty">최근 기록이 없습니다.</p>
+          )}
+        </section>
+
         {results.length > 0 && (
           <ImageModal
             result={results[modalState.index]}
@@ -271,7 +354,7 @@ export default function App() {
       </main>
 
       <footer className="app__footer">
-        <p>Powered by Claude AI · WCAG 2.1 기반 명도대비 분석</p>
+        <p>WCAG 2.1 기반 명도대비 분석</p>
       </footer>
     </div>
   );

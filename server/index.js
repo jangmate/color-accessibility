@@ -7,11 +7,43 @@ import helmet from 'helmet';
 import sharp from 'sharp';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import sqlite3 from 'sqlite3';
 
 config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 데이터베이스 초기화
+const db = new sqlite3.Database(path.join(__dirname, 'history.db'), (err) => {
+  if (err) {
+    console.error('SQLite 연결 오류:', err.message);
+  } else {
+    console.log('SQLite 데이터베이스 연결 성공');
+    db.run(`
+      CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename TEXT NOT NULL,
+        imageData TEXT NOT NULL,
+        analysis TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  }
+});
+
+// 프로미스 기반 DB 함수
+const runDb = (sql, params) => new Promise((resolve, reject) => {
+  db.run(sql, params, function (err) {
+    if (err) reject(err); else resolve(this);
+  });
+});
+
+const getDb = (sql, params) => new Promise((resolve, reject) => {
+  db.all(sql, params, (err, rows) => {
+    if (err) reject(err); else resolve(rows);
+  });
+});
 
 if (!process.env.GITHUB_TOKEN) {
   console.error('오류: GITHUB_TOKEN 환경 변수가 설정되지 않았습니다. .env 파일을 확인해주세요.');
@@ -298,6 +330,19 @@ app.post('/api/analyze', upload.array('images', 5), async (req, res) => {
     }
 
     console.log(`✅ 분석 완료: ${validResults.length}개 이미지 성공`);
+    
+    // DB에 검수 결과 저장
+    for (const resItem of validResults) {
+      try {
+        await runDb(
+          'INSERT INTO history (filename, imageData, analysis) VALUES (?, ?, ?)',
+          [resItem.filename, resItem.imageData, JSON.stringify(resItem.analysis)]
+        );
+      } catch (dbErr) {
+        console.error('DB 저장 실패:', dbErr);
+      }
+    }
+
     res.json({ results: validResults, count: validResults.length });
   } catch (error) {
     console.error('[FATAL ERROR]', error);
@@ -316,15 +361,48 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+// 히스토리 조회 API
+app.get('/api/history', async (req, res) => {
+  try {
+    const search = req.query.search || '';
+    const limit = parseInt(req.query.limit, 10) || 50; 
+    
+    let sql = 'SELECT id, filename, imageData, analysis, created_at FROM history';
+    const params = [];
+
+    if (search) {
+      sql += ' WHERE filename LIKE ? OR analysis LIKE ?';
+      const term = `%${search}%`;
+      params.push(term, term);
+    }
+
+    sql += ' ORDER BY id DESC LIMIT ?';
+    params.push(limit);
+
+    const rows = await getDb(sql, params);
+    const parsedRows = rows.map(row => ({
+      id: row.id,
+      filename: row.filename,
+      imageData: row.imageData,
+      analysis: JSON.parse(row.analysis),
+      created_at: row.created_at
+    }));
+
+    res.json({ history: parsedRows });
+  } catch (error) {
+    console.error('히스토리 조회 오류:', error);
+    res.status(500).json({ error: '히스토리 조회 중 오류가 발생했습니다.' });
+  }
+});
+
 // 정적 파일 서빙 (프로덕션 환경: 프론트엔드 빌드 파일)
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
 // 그 외 모든 경로는 프론트엔드의 index.html을 반환하도록 설정 (SPA 라우팅 지원)
-app.get('*', (req, res) => {
+app.get(/(.*)/, (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
-
 // 비동기 예외 및 종료 원인 추적
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);

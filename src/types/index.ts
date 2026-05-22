@@ -19,10 +19,12 @@ export interface ImageAnalysis {
 }
 
 export interface AnalysisResult {
+  id?: number;
   filename: string;
   imageData: string;
   analysis?: ImageAnalysis;
   status?: 'queued' | 'analyzing' | 'done' | 'error';
+  created_at?: string;
 }
 
 export type UploadStatus = 'idle' | 'uploading' | 'done' | 'error';
