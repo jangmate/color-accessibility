@@ -162,11 +162,11 @@ const upload = multer({
 
 // CORS 설정 - 보안 강화
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: true,
   credentials: true,
   maxAge: 86400, // 24시간
-  methods: ['POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
 // Helmet 보안 헤더 추가
@@ -498,12 +498,13 @@ app.get('/api/history', requireAuth, async (req, res) => {
 });
 
 // 정적 파일 서빙 (프로덕션 환경: 프론트엔드 빌드 파일)
-const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
+const buildPath = path.join(__dirname, '../build');
+app.use('/color-accessibility', express.static(buildPath)); // vite.config.ts의 base 적용
+app.use(express.static(buildPath)); // 루트 접근용
 
 // 그 외 모든 경로는 프론트엔드의 index.html을 반환하도록 설정 (SPA 라우팅 지원)
 app.get(/(.*)/, (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+  res.sendFile(path.join(buildPath, 'index.html'));
 });
 // 비동기 예외 및 종료 원인 추적
 process.on('uncaughtException', (err) => {

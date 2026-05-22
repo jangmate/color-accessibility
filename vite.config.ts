@@ -16,4 +16,7 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    outDir: 'build', // 빌드 결과물이 생성될 폴더명을 지정합니다.
+  }
 })
