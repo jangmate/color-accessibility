@@ -8,11 +8,15 @@ import sharp from 'sharp';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sqlite3 from 'sqlite3';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
 
 config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_color_accessibility';
 
 // 데이터베이스 초기화
 const db = new sqlite3.Database(path.join(__dirname, 'history.db'), (err) => {
@@ -21,14 +25,29 @@ const db = new sqlite3.Database(path.join(__dirname, 'history.db'), (err) => {
   } else {
     console.log('SQLite 데이터베이스 연결 성공');
     db.run(`
-      CREATE TABLE IF NOT EXISTS history (
+      CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT NOT NULL,
-        imageData TEXT NOT NULL,
-        analysis TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        filename TEXT NOT NULL,
+        imageData TEXT NOT NULL,
+        analysis TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+      )
+    `, () => {
+      // 만약 기존 history 테이블이 있다면 user_id 컬럼 추가 시도
+      db.run(`ALTER TABLE history ADD COLUMN user_id INTEGER;`, (err) => {
+        // 이미 컬럼이 존재하면 무시됨
+      });
+    });
   }
 });
 
@@ -162,6 +181,85 @@ app.use(helmet({
 }));
 
 app.use(express.json({ limit: '1mb' })); // JSON 페이로드 크기 제한
+app.use(cookieParser());
+
+// 인증 미들웨어
+const authenticate = (req, res, next) => {
+  const token = req.cookies.token;
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    req.user = null;
+    next();
+  }
+};
+
+const requireAuth = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: '로그인이 필요합니다.' });
+  }
+  next();
+};
+
+app.use(authenticate);
+
+// 회원가입
+app.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: '아이디와 비밀번호를 입력해주세요.' });
+
+  try {
+    const existing = await getDb('SELECT id FROM users WHERE username = ?', [username]);
+    if (existing.length > 0) return res.status(400).json({ error: '이미 존재하는 아이디입니다.' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await runDb('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword]);
+    res.json({ message: '회원가입 성공', userId: result.lastID });
+  } catch (error) {
+    console.error('회원가입 오류:', error);
+    res.status(500).json({ error: '회원가입 중 오류가 발생했습니다.' });
+  }
+});
+
+// 로그인
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: '아이디와 비밀번호를 입력해주세요.' });
+
+  try {
+    const users = await getDb('SELECT * FROM users WHERE username = ?', [username]);
+    const user = users[0];
+    if (!user) return res.status(400).json({ error: '아이디 또는 비밀번호가 일치하지 않습니다.' });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ error: '아이디 또는 비밀번호가 일치하지 않습니다.' });
+
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 86400000 });
+    res.json({ message: '로그인 성공', user: { id: user.id, username: user.username } });
+  } catch (error) {
+    console.error('로그인 오류:', error);
+    res.status(500).json({ error: '로그인 중 오류가 발생했습니다.' });
+  }
+});
+
+// 로그아웃
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ message: '로그아웃 ���' });
+});
+
+// 내 정보 조회
+app.get('/api/me', (req, res) => {
+  if (!req.user) return res.json({ user: null });
+  res.json({ user: req.user });
+});
 
 // GitHub Models API 클라이언트 초기화
 const client = new OpenAI({
@@ -330,16 +428,18 @@ app.post('/api/analyze', upload.array('images', 5), async (req, res) => {
     }
 
     console.log(`✅ 분석 완료: ${validResults.length}개 이미지 성공`);
-    
+
     // DB에 검수 결과 저장
     for (const resItem of validResults) {
-      try {
-        await runDb(
-          'INSERT INTO history (filename, imageData, analysis) VALUES (?, ?, ?)',
-          [resItem.filename, resItem.imageData, JSON.stringify(resItem.analysis)]
-        );
-      } catch (dbErr) {
-        console.error('DB 저장 실패:', dbErr);
+      if (req.user) {
+        try {
+          await runDb(
+            'INSERT INTO history (user_id, filename, imageData, analysis) VALUES (?, ?, ?, ?)',
+            [req.user.id, resItem.filename, resItem.imageData, JSON.stringify(resItem.analysis)]
+          );
+        } catch (dbErr) {
+          console.error('DB 저장 실패:', dbErr);
+        }
       }
     }
 
@@ -362,16 +462,16 @@ app.get('/health', (_req, res) => {
 });
 
 // 히스토리 조회 API
-app.get('/api/history', async (req, res) => {
+app.get('/api/history', requireAuth, async (req, res) => {
   try {
     const search = req.query.search || '';
-    const limit = parseInt(req.query.limit, 10) || 50; 
-    
-    let sql = 'SELECT id, filename, imageData, analysis, created_at FROM history';
-    const params = [];
+    const limit = parseInt(req.query.limit, 10) || 50;
+
+    let sql = 'SELECT id, filename, imageData, analysis, created_at FROM history WHERE user_id = ?';
+    const params = [req.user.id];
 
     if (search) {
-      sql += ' WHERE filename LIKE ? OR analysis LIKE ?';
+      sql += ' AND (filename LIKE ? OR analysis LIKE ?)';
       const term = `%${search}%`;
       params.push(term, term);
     }

@@ -3,10 +3,13 @@ import { DropZone } from './components/DropZone';
 import { ClipboardInput } from './components/ClipboardInput';
 import { ImageCard } from './components/ImageCard';
 import { ImageModal } from './components/ImageModal';
+import { AuthModal } from './components/AuthModal';
 import type { AnalysisResult, UploadStatus } from './types';
 import './App.css';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<{ id: number, username: string } | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [historySearch, setHistorySearch] = useState('');
@@ -20,8 +23,27 @@ export default function App() {
   const [queue, setQueue] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 히스토리 항목 불러오기
+  // 사용자 정보 불러오기
+  useEffect(() => {
+    fetch('/api/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) setCurrentUser(data.user);
+      })
+      .catch(e => console.error('사용자 정보 불러오기 실패:', e));
+  }, []);
+
+  // 로그인 상태가 변경될 때 히스토리 항목 불러오기
+  useEffect(() => {
+    if (currentUser) {
+      fetchHistory();
+    } else {
+      setHistory([]); // 로그아웃 시 히스토리 지움
+    }
+  }, [currentUser]);
+
   const fetchHistory = async (search = '') => {
+    if (!currentUser) return; // 비로그인 시 요청 안 함
     try {
       const url = search ? `/api/history?search=${encodeURIComponent(search)}` : '/api/history';
       const res = await fetch(url);
@@ -182,6 +204,15 @@ export default function App() {
     fetchHistory(historySearch);
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+      setCurrentUser(null);
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
   const visibleHistory = showAllHistory ? history : history.slice(0, 6);
 
   return (
@@ -202,6 +233,16 @@ export default function App() {
           </div>
         </div>
         <div className="app__header-actions">
+          {currentUser ? (
+            <div className="user-info">
+              <span className="welcome-text">환영합니다, <strong>{currentUser.username}</strong>님!</span>
+              <button className="btn btn--secondary" onClick={handleLogout}>로그아웃</button>
+            </div>
+          ) : (
+            <button className="btn btn--primary" onClick={() => setIsAuthModalOpen(true)}>
+              로그인 / 회원가입
+            </button>
+          )}
           <a
             href="https://www.w3.org/TR/WCAG21/#contrast-minimum"
             target="_blank"
@@ -273,19 +314,28 @@ export default function App() {
         <section className="results-section history-section">
           <div className="results-header">
             <h2>최근 검수 기록 ({history.length}개)</h2>
-            <form onSubmit={handleSearchSubmit} className="history-search-form">
-              <input
-                type="text"
-                placeholder="결과 검색..."
-                value={historySearch}
-                onChange={handleHistorySearch}
-                className="history-search-input"
-              />
-              <button type="submit" className="btn btn--secondary">검색</button>
-            </form>
+            {currentUser && (
+              <form onSubmit={handleSearchSubmit} className="history-search-form">
+                <input
+                  type="text"
+                  placeholder="결과 검색..."
+                  value={historySearch}
+                  onChange={handleHistorySearch}
+                  className="history-search-input"
+                />
+                <button type="submit" className="btn btn--secondary">검색</button>
+              </form>
+            )}
           </div>
           
-          {history.length > 0 ? (
+          {!currentUser ? (
+            <div className="history-empty">
+              <p>로그인하여 본인의 이전 검수 기록을 확인하세요.</p>
+              <button className="btn btn--primary" style={{ marginTop: '12px' }} onClick={() => setIsAuthModalOpen(true)}>
+                로그인 하기
+              </button>
+            </div>
+          ) : history.length > 0 ? (
             <>
               <div className="results-list">
                 {visibleHistory.map((item, i) => (
@@ -316,6 +366,15 @@ export default function App() {
             <p className="history-empty">최근 기록이 없습니다.</p>
           )}
         </section>
+
+        <AuthModal 
+          isOpen={isAuthModalOpen} 
+          onClose={() => setIsAuthModalOpen(false)} 
+          onSuccess={(user) => {
+            setCurrentUser(user);
+            setIsAuthModalOpen(false);
+          }} 
+        />
 
         {results.length > 0 && (
           <ImageModal
