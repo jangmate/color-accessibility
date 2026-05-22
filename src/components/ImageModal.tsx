@@ -56,6 +56,8 @@ export function ImageModal({
 }: ImageModalProps) {
   const [fgColor, setFgColor] = useState<string>('');
   const [bgColor, setBgColor] = useState<string>('');
+  const [hoveredElementId, setHoveredElementId] = useState<number | null>(null);
+  const [showBoundingBox, setShowBoundingBox] = useState<boolean>(true);
 
   const pickColor = async (setColor: (color: string) => void) => {
     if (!('EyeDropper' in window)) {
@@ -121,16 +123,65 @@ export function ImageModal({
           ✕
         </button>
 
-        <div className="image-modal__content">
-          <img
-            src={result.imageData}
-            alt={result.filename}
-            className="image-modal__image"
-          />
+        <div className="image-modal__content" style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <img
+              src={result.imageData}
+              alt={result.filename}
+              className="image-modal__image"
+              style={{ display: 'block', maxWidth: '100%', maxHeight: '65vh', width: 'auto', height: 'auto' }}
+            />
+            {showBoundingBox && result.analysis && result.analysis.elements.map(el => {
+              if (!el.boundingBox) return null;
+              const [x, y, w, h] = el.boundingBox;
+              const isHovered = hoveredElementId === el.id;
+              const isFail = !el.wcagAA;
+              const borderColor = isFail ? 'rgba(239, 68, 68, 1)' : 'rgba(34, 197, 94, 1)';
+              const backgroundColor = isFail ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)';
+
+              return (
+                <div
+                  key={el.id}
+                  style={{
+                    position: 'absolute',
+                    left: `${x}%`,
+                    top: `${y}%`,
+                    width: `${w}%`,
+                    height: `${h}%`,
+                    border: `2px solid ${borderColor}`,
+                    backgroundColor: isHovered ? backgroundColor : 'transparent',
+                    boxShadow: isHovered ? `0 0 10px ${borderColor}` : 'none',
+                    zIndex: isHovered ? 10 : 1,
+                    pointerEvents: 'none',
+                    transition: 'all 0.2s',
+                  }}
+                />
+              );
+            })}
+          </div>
         </div>
 
         <div className="image-modal__info">
-          <h2 className="image-modal__filename">{result.filename}</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h2 className="image-modal__filename" style={{ margin: 0 }}>{result.filename}</h2>
+            <button
+              onClick={() => setShowBoundingBox(!showBoundingBox)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: showBoundingBox ? '#ef4444' : '#3b82f6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                transition: 'background-color 0.2s'
+              }}
+            >
+              위치보기 {showBoundingBox ? '끄기' : '켜기'}
+            </button>
+          </div>
           {result.analysis && (
             <p className="image-modal__status">
               {result.analysis.overallPass ? '✓ WCAG AA 통과' : '✗ WCAG AA 미충족'}
@@ -147,7 +198,13 @@ export function ImageModal({
                   const recommendedFg = isFail ? recommendColor(el.foregroundColor, el.backgroundColor, targetRatio) : null;
 
                   return (
-                    <div key={i} className={`modal-element-card${isFail ? ' modal-element-card--fail' : ''}`}>
+                    <div
+                      key={el.id || i}
+                      className={`modal-element-card${isFail ? ' modal-element-card--fail' : ''}`}
+                      onMouseEnter={() => setHoveredElementId(el.id)}
+                      onMouseLeave={() => setHoveredElementId(null)}
+                      style={{ cursor: el.boundingBox ? 'pointer' : 'default', border: hoveredElementId === el.id ? `2px solid ${isFail ? '#ef4444' : '#22c55e'}` : undefined }}
+                    >
                       <div className="modal-element-card__header">
                         <div className="modal-element-card__colors">
                           <div className="color-pair__item">

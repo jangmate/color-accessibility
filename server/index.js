@@ -284,10 +284,12 @@ const ANALYZE_PROMPT = "중요: 이미지를 분석할 때 오로지 텍스트(�
   "   L = 0.2126 * R_lin + 0.7152 * G_lin + 0.0722 * B_lin\n" +
   "5) 두 색상의 상대휘도 L1, L2를 결정(큰 값을 L1, 작은 값을 L2로 사용)하고,\n" +
   "   contrast ratio = (L1 + 0.05) / (L2 + 0.05)\n" +
-  "6) contrast ratio는 소수점 한 자리까지 반올림하여 'contrastRatio'에 넣으세요 (예: 2.6, 9.3).\n\n" +
+  "6) contrast ratio는 소수점 한 자리까지 반올림하여 'contrastRatio'에 넣으세요 (예: 2.6, 9.3).\n" +
+  "7) [필수] 각 텍스트 요소가 이미지에서 차지하는 위치와 크기를 'boundingBox' 속성에 반드시 배열로 입력하세요. 형식은 [x, y, width, height]이며, 단위는 전체 이미지 크기 대비 퍼센트(0-100)입니다. (예: 왼쪽 최상단에서 너비 20%, 높이 10%인 경우 [0, 0, 20, 10])\n\n" +
   "응답 형식(정확히 이 JSON만 반환):\n" +
-  "{\n  \"summary\": \"한국어 평가\",\n  \"overallPass\": boolean,\n  \"elements\": [\n    {\n      \"id\": number,\n      \"description\": \"텍스트 내용 및 설명 (예: 헤드라인, 본문 등)\",\n      \"type\": \"normal_text\" | \"large_text\" | \"ui_component\",\n      \"foregroundColor\": \"#HEX\",\n      \"backgroundColor\": \"#HEX\",\n      \"contrastRatio\": number,\n      \"calculation\": {\n        \"foreground\": { \"r\": number, \"g\": number, \"b\": number, \"r_lin\": number, \"g_lin\": number, \"b_lin\": number, \"L\": number },\n        \"background\": { \"r\": number, \"g\": number, \"b\": number, \"r_lin\": number, \"g_lin\": number, \"b_lin\": number, \"L\": number }\n      },\n      \"wcagAA\": boolean,\n      \"wcagAAA\": boolean,\n      \"location\": \"위치\"\n    }\n  ]\n}\n" +
+  "{\n  \"summary\": \"한국어 평가\",\n  \"overallPass\": boolean,\n  \"elements\": [\n    {\n      \"id\": number,\n      \"description\": \"텍스트 내용 및 설명 (예: 헤드라인, 본문 등)\",\n      \"type\": \"normal_text\" | \"large_text\" | \"ui_component\",\n      \"foregroundColor\": \"#HEX\",\n      \"backgroundColor\": \"#HEX\",\n      \"contrastRatio\": number,\n      \"calculation\": {\n        \"foreground\": { \"r\": number, \"g\": number, \"b\": number, \"r_lin\": number, \"g_lin\": number, \"b_lin\": number, \"L\": number },\n        \"background\": { \"r\": number, \"g\": number, \"b\": number, \"r_lin\": number, \"g_lin\": number, \"b_lin\": number, \"L\": number }\n      },\n      \"wcagAA\": boolean,\n      \"wcagAAA\": boolean,\n      \"location\": \"위치\",\n      \"boundingBox\": [number, number, number, number]\n    }\n  ]\n}\n" +
   "추가 지침:\n" +
+  "- [매우 중요] 반드시 모든 element 객체 내부에 'boundingBox' 배열(4개의 숫자)을 포함해야 합니다.\n" +
   "- [매우 중요] 'type'의 분류 기준: 두껍고 큰 제목(약 18pt 이상, 또는 14pt 볼드 상당)은 'large_text', 버튼이나 입력창 등 UI 컴포넌트의 텍스트는 'ui_component', 그 외의 작은 본문 텍스트는 'normal_text'로 분류하세요.\n" +
   "- 텍스트 색상(foregroundColor)과 배경색(backgroundColor) 추출의 정확도가 생명입니다. 대략적인 색상 이름을 기반으로 HEX를 유추하지 마세요.\n" +
   "- 위의 수학적 절차로 정확하게 계산하세요.\n" +

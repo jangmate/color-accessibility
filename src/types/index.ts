@@ -10,6 +10,7 @@ export interface ContrastElement {
   wcagAA: boolean;
   wcagAAA: boolean;
   location: string;
+  boundingBox?: [number, number, number, number];
 }
 
 export interface ImageAnalysis {
