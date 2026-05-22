@@ -16,9 +16,10 @@ export default function App() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [modalState, setModalState] = useState<{ isOpen: boolean; index: number }>({
+  const [modalState, setModalState] = useState<{ isOpen: boolean; index: number; source: 'results' | 'history' }>({
     isOpen: false,
     index: 0,
+    source: 'results',
   });
   const [queue, setQueue] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -174,25 +175,31 @@ export default function App() {
   };
 
   const handleImageClick = (index: number) => {
-    setModalState({ isOpen: true, index });
+    setModalState({ isOpen: true, index, source: 'results' });
   };
 
   const handleModalClose = () => {
-    setModalState({ isOpen: false, index: 0 });
+    setModalState(prev => ({ ...prev, isOpen: false }));
   };
 
   const handleModalPrevious = () => {
-    setModalState((prev) => ({
-      ...prev,
-      index: prev.index > 0 ? prev.index - 1 : results.length - 1,
-    }));
+    setModalState((prev) => {
+      const arr = prev.source === 'history' ? visibleHistory : results;
+      return {
+        ...prev,
+        index: prev.index > 0 ? prev.index - 1 : arr.length - 1,
+      };
+    });
   };
 
   const handleModalNext = () => {
-    setModalState((prev) => ({
-      ...prev,
-      index: prev.index < results.length - 1 ? prev.index + 1 : 0,
-    }));
+    setModalState((prev) => {
+      const arr = prev.source === 'history' ? visibleHistory : results;
+      return {
+        ...prev,
+        index: prev.index < arr.length - 1 ? prev.index + 1 : 0,
+      };
+    });
   };
 
   const handleHistorySearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -343,10 +350,7 @@ export default function App() {
                     key={`history-${item.id || i}`}
                     result={{...item, status: 'done'}}
                     onImageClick={() => {
-                      // 모달 처리를 위해 임시로 results에 넣거나 모달용 분리 가능
-                      // 간단하게 results를 통해 모달을 띄우는 구조라면 해당 기록을 results 맨 앞에 추가
-                      setResults(prev => [item, ...prev.filter(r => r.filename !== item.filename)]);
-                      setModalState({ isOpen: true, index: 0 });
+                      setModalState({ isOpen: true, index: i, source: 'history' });
                     }}
                   />
                 ))}
@@ -376,15 +380,15 @@ export default function App() {
           }} 
         />
 
-        {results.length > 0 && (
+        {modalState.isOpen && (modalState.source === 'history' ? visibleHistory.length > 0 : results.length > 0) && (
           <ImageModal
-            result={results[modalState.index]}
+            result={modalState.source === 'history' ? visibleHistory[modalState.index] : results[modalState.index]}
             isOpen={modalState.isOpen}
             onClose={handleModalClose}
             onPrevious={handleModalPrevious}
             onNext={handleModalNext}
-            hasPrevious={results.length > 1}
-            hasNext={results.length > 1}
+            hasPrevious={(modalState.source === 'history' ? visibleHistory : results).length > 1}
+            hasNext={(modalState.source === 'history' ? visibleHistory : results).length > 1}
           />
         )}
 
